@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GoodVibesOnly</title>
+<style>
+  :root { --bg:#0a0a0f; --card:#12121a; --text:#e5e5e5; --muted:#888; --accent:#7c3aed; --accent2:#22c55e; --border:#222; }
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui;background:var(--bg);color:var(--text)}
+  header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--card);position:sticky;top:0}
+  .btn{background:var(--accent);color:white;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-weight:600}
+  .btn:hover{opacity:0.9}
+  .btn-secondary{background:var(--card);border:1px solid var(--border);color:var(--text)}
+  .container{max-width:900px;margin:0 auto;padding:24px}
+  .page{display:none}.page.active{display:block}
+  .search-box{width:100%;padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:16px;margin-bottom:24px}
+  .user-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;gap:16px;align-items:center;margin-bottom:12px}
+  .avatar{width:56px;height:56px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px}
+  .user-info{flex:1} .user-info h3{margin:0 0 4px} .user-info p{margin:0;color:var(--muted);font-size:14px}
+  .review{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin:10px 0}
+  .review small{color:var(--muted)}
+  input,textarea{width:100%;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);margin:8px 0;font-family:inherit}
+  .error{color:#ff6b6b;font-size:14px;margin:8px 0}
+  .success{color:var(--accent2);font-size:14px;margin:8px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✨ GoodVibesOnly</h1>
+  <div id="userInfo"></div>
+</header>
+
+<div class="container">
+  <!-- 1. AUTH PAGE (Sign Up / Login) -->
+  <div id="auth" class="page active">
+    <div id="authTab" style="display:flex;gap:10px;margin-bottom:20px">
+      <button class="btn" onclick="showSignup()">Sign Up</button>
+      <button class="btn-secondary" onclick="showLogin()">Login</button>
+    </div>
+
+    <!-- Sign Up Form -->
+    <div id="signupForm" style="display:block">
+      <h2>Create Account</h2>
+      <input id="signupEmail" type="email" placeholder="Email">
+      <input id="signupUsername" type="text" placeholder="Username">
+      <input id="signupPassword" type="password" placeholder="Password">
+      <textarea id="signupBio" placeholder="Bio (optional)" rows="2"></textarea>
+      <button class="btn" onclick="signup()">Sign Up</button>
+      <div id="signupError"></div>
+    </div>
+
+    <!-- Login Form -->
+    <div id="loginForm" style="display:none">
+      <h2>Login</h2>
+      <input id="loginEmail" type="email" placeholder="Email">
+      <input id="loginPassword" type="password" placeholder="Password">
+      <button class="btn" onclick="login()">Login</button>
+      <div id="loginError"></div>
+    </div>
+  </div>
+
+  <!-- 2. SEARCH PAGE -->
+  <div id="search" class="page">
+    <h2>Find someone to hype up</h2>
+    <input class="search-box" id="searchInput" placeholder="Search username..." oninput="loadUsers()">
+    <div id="userList">Loading users...</div>
+  </div>
+
+  <!-- 3. USER PROFILE PAGE -->
+  <div id="profile" class="page">
+    <button class="btn-secondary" onclick="goTo('search')">← Back to Search</button>
+    <div id="profileHeader"></div>
+    <h3>Leave a Review</h3>
+    <textarea id="reviewText" rows="3" placeholder="Say something awesome about them..."></textarea>
+    <button class="btn" onclick="postReview()">Post Review</button>
+    <div id="reviewError"></div>
+    <h3>Reviews</h3>
+    <div id="reviews"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://your-vercel-url.vercel.app/api';
+let TOKEN = localStorage.getItem('gv_token');
+let CURRENT_USER = localStorage.getItem('gv_user');
+let VIEWING_USER = null;
+
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(page).classList.add('active');
+  if (page === 'search') loadUsers();
+  updateUserInfo();
+}
+
+function updateUserInfo() {
+  if (TOKEN && CURRENT_USER) {
+    document.getElementById('userInfo').innerHTML = `<span>${CURRENT_USER}</span> <button class="btn-secondary" onclick="logout()">Logout</button>`;
+  } else {
+    document.getElementById('userInfo').innerHTML = '';
+  }
+}
+
+function showSignup() {
+  document.getElementById('signupForm').style.display = 'block';
+  document.getElementById('loginForm').style.display = 'none';
+}
+
+function showLogin() {
+  document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('signupForm').style.display = 'none';
+}
+
+async function signup() {
+  const email = document.getElementById('signupEmail').value;
+  const username = document.getElementById('signupUsername').value;
+  const password = document.getElementById('signupPassword').value;
+  const bio = document.getElementById('signupBio').value;
+
+  const res = await fetch(`${API_BASE}/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, username, password, bio })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    return document.getElementById('signupError').innerHTML = `<div class="error">${data.error}</div>`;
+  }
+
+  TOKEN = data.token;
+  CURRENT_USER = data.username;
+  localStorage.setItem('gv_token', TOKEN);
+  localStorage.setItem('gv_user', CURRENT_USER);
+  goTo('search');
+}
+
+async function login() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    return document.getElementById('loginError').innerHTML = `<div class="error">${data.error}</div>`;
+  }
+
+  TOKEN = data.token;
+  CURRENT_USER = data.username;
+  localStorage.setItem('gv_token', TOKEN);
+  localStorage.setItem('gv_user', CURRENT_USER);
+  goTo('search');
+}
+
+function logout() {
+  TOKEN = null;
+  CURRENT_USER = null;
+  localStorage.removeItem('gv_token');
+  localStorage.removeItem('gv_user');
+  goTo('auth');
+}
+
+async function loadUsers() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const res = await fetch(`${API_BASE}/users`);
+  const users = await res.json();
+  const filtered = users.filter(u => u.username.includes(q));
+
+  document.getElementById('userList').innerHTML = filtered.length ? filtered.map(u => `
+    <div class="user-card">
+      <div class="avatar">${u.username[0].toUpperCase()}</div>
+      <div class="user-info">
+        <h3>@${u.username}</h3>
+        <p>${u.bio || 'No bio'}</p>
+      </div>
+      <button class="btn" onclick="viewProfile(${u.id}, '${u.username}')">Review</button>
+    </div>
+  `).join('') : 'No users found';
+}
+
+async function viewProfile(userId, username) {
+  VIEWING_USER = { id: userId, username };
+  document.getElementById('profileHeader').innerHTML = `
+    <div class="user-card">
+      <div class="avatar">${username[0].toUpperCase()}</div>
+      <div class="user-info"><h3>@${username}</h3></div>
+    </div>
+  `;
+  goTo('profile');
+  loadReviews(userId);
+}
+
+async function postReview() {
+  if (!TOKEN) return alert('Please login first');
+  const text = document.getElementById('reviewText').value;
+  if (!text) return;
+
+  const res = await fetch(`${API_BASE}/reviews`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${TOKEN}`
+    },
+    body: JSON.stringify({ to_user_id: VIEWING_USER.id, text })
+  });
+
+  if (!res.ok) {
+    const data = await res.json();
+    return document.getElementById('reviewError').innerHTML = `<div class="error">${data.error}</div>`;
+  }
+
+  document.getElementById('reviewText').value = '';
+  document.getElementById('reviewError').innerHTML = '<div class="success">Review posted!</div>';
+  loadReviews(VIEWING_USER.id);
+}
+
+async function loadReviews(userId) {
+  const res = await fetch(`${API_BASE}/reviews/${userId}`);
+  const reviews = await res.json();
+  document.getElementById('reviews').innerHTML = reviews.length ? reviews.map(r => `
+    <div class="review"><b>@${r.from_user}</b>: ${r.text}<br><small>${new Date(r.created_at).toLocaleDateString()}</small></div>
+  `).join('') : 'No reviews yet';
+}
+
+if (TOKEN) goTo('search');
+updateUserInfo();
+</script>
+</body>
+</html>
